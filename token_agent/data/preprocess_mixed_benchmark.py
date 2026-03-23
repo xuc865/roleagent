@@ -128,9 +128,57 @@ def _jsonl_iter(path: str):
                 yield json.loads(line)
 
 
+def _local_dir_key(data_source: str) -> str:
+    """
+    Map a dataset `data_source` (as in DATASET_REGISTRY) to a preferred local
+    sub-directory name under TOKEN_AGENT_DATA_DIR.
+
+    Goal: avoid mixing raw datasets in one folder.
+    """
+    # gsm8k
+    if data_source in ("openai/gsm8k", "gsm8k"):
+        return "gsm8k"
+
+    # math
+    if data_source in ("lighteval/MATH", "math"):
+        return "math"
+    if data_source in ("math_dapo", "math_dapo_alt"):
+        # you can choose to name this subdir as you like; keep a sensible default.
+        return "math_dapo"
+
+    # AIME
+    if data_source.startswith("aime_"):
+        # aime_2024 -> aime24 ; aime_2025 -> aime25
+        year = data_source.split("_")[-1]
+        suffix = year[-2:]  # "24" / "25"
+        return f"aime{suffix}"
+    if data_source in ("aime24", "aime25"):
+        return data_source
+
+    # SQuAD
+    if data_source == "squad":
+        return "squad"
+
+    # Keep other datasets in their own directory using a normalized name.
+    return data_source.replace("/", "_")
+
+
+def _local_root_for_data_source(data_source: str) -> str:
+    """
+    Prefer TOKEN_AGENT_DATA_DIR/<local_subdir> if it exists, otherwise fall
+    back to TOKEN_AGENT_DATA_DIR.
+    """
+    assert LOCAL_DATA_DIR is not None
+    key = _local_dir_key(data_source)
+    subdir = os.path.join(LOCAL_DATA_DIR, key)
+    if os.path.isdir(subdir):
+        return subdir
+    return LOCAL_DATA_DIR
+
+
 def _process_gsm8k_local(meta: DatasetMeta, split: str) -> List[dict]:
     assert LOCAL_DATA_DIR is not None
-    root = LOCAL_DATA_DIR
+    root = _local_root_for_data_source(meta.data_source)
     path = _find_first_existing_file(root, ["gsm8k.json", "gsm8k.jsonl"])
     if not path:
         return []
@@ -177,7 +225,7 @@ def _process_gsm8k_local(meta: DatasetMeta, split: str) -> List[dict]:
 
 def _process_math_local(meta: DatasetMeta, split: str) -> List[dict]:
     assert LOCAL_DATA_DIR is not None
-    root = LOCAL_DATA_DIR
+    root = _local_root_for_data_source(meta.data_source)
 
     # Your local directory contains:
     # - math500.jsonl
@@ -241,7 +289,7 @@ def _process_math_local(meta: DatasetMeta, split: str) -> List[dict]:
 def _process_aime_local(meta: DatasetMeta, split: str) -> List[dict]:
     """Load AIME-like problems from local files if present."""
     assert LOCAL_DATA_DIR is not None
-    root = LOCAL_DATA_DIR
+    root = _local_root_for_data_source(meta.data_source)
 
     # Prefer parquet (your local AIME files are parquet).
     # - aime24.parquet: columns = [id, problem, solution, url]
@@ -366,9 +414,181 @@ def process_aime(meta: DatasetMeta, split: str) -> List[dict]:
     return []
 
 
+def _process_squad_local(meta: DatasetMeta, split: str) -> List[dict]:
+    """
+    Load SQuAD-style data from LOCAL_DATA_DIR if present.
+
+    We try a few common layouts:
+    1) Separate parquet/jsonl for train/validation/test
+    2) One parquet with an explicit split column
+
+    Expected output matches the schema produced by process_squad().
+    """
+    assert LOCAL_DATA_DIR is not None
+    root = _local_root_for_data_source(meta.data_source)
+
+    # Candidate parquet/jsonl filenames/patterns.
+    # Your local artifacts may come from your preprocessing pipeline, so
+    # we keep patterns broad.
+    parquet_candidates = [
+        "squad_train.parquet",
+        "squad_validation.parquet",
+        "squad_test.parquet",
+        "*squad*train*.parquet",
+        "*squad*validation*.parquet",
+        "*squad*test*.parquet",
+        "squad.parquet",
+        "*squad*.parquet",
+    ]
+    jsonl_candidates = [
+        "squad_train.jsonl",
+        "squad_validation.jsonl",
+        "squad_test.jsonl",
+        "*squad*train*.jsonl",
+        "*squad*validation*.jsonl",
+        "*squad*test*.jsonl",
+        "squad.jsonl",
+        "*squad*.jsonl",
+    ]
+
+    target_splits = {"train": {"train"}, "test": {"validation", "test"}}
+    keep_splits = target_splits.get(split, {split})
+
+    def _extract_answers(ans_field) -> List[str]:
+        if ans_field is None:
+            return []
+        # HF style: {"text": [...], "answer_start": [...]}
+        if isinstance(ans_field, dict):
+            txt = ans_field.get("text", [])
+            if isinstance(txt, list):
+                return [str(x) for x in txt if x is not None]
+            if isinstance(txt, str):
+                return [txt]
+            return []
+        if isinstance(ans_field, list):
+            return [str(x) for x in ans_field if x is not None]
+        if isinstance(ans_field, str):
+            return [ans_field]
+        return []
+
+    # Prefer parquet when available.
+    for pat in parquet_candidates:
+        matches = glob.glob(os.path.join(root, pat))
+        if not matches:
+            continue
+        path = matches[0]
+        try:
+            df = pd.read_parquet(path)
+        except Exception:
+            continue
+        if df is None or len(df) == 0:
+            continue
+
+        # If there's an explicit split column, filter it.
+        split_col = None
+        for cand in ["split", "data_split", "set"]:
+            if cand in df.columns:
+                split_col = cand
+                break
+        if split_col is not None:
+            mask = df[split_col].astype(str).isin(keep_splits)
+            df = df[mask]
+        if len(df) == 0:
+            continue
+
+        rows: List[dict] = []
+        # Column heuristics.
+        q_col = next((c for c in ["question", "question_text", "query"] if c in df.columns), None)
+        c_col = next((c for c in ["context", "context_text", "paragraph"] if c in df.columns), None)
+        ans_col = next((c for c in ["answers", "answer"] if c in df.columns), None)
+        # Some local formats might store answer text directly.
+        if q_col is None or c_col is None:
+            continue
+        if ans_col is None:
+            # try singular 'answer'
+            ans_col = "answers" if "answers" in df.columns else None
+        if ans_col is None:
+            continue
+
+        for i, ex in enumerate(df.to_dict(orient="records")):
+            question = ex.get(q_col, "") or ""
+            context = ex.get(c_col, "") or ""
+            answers = _extract_answers(ex.get(ans_col))
+            if question == "" or context == "" or not answers:
+                continue
+            question_str = f"Context: {context}\n\nQuestion: {question}"
+            rows.append({
+                "data_source": meta.data_source,
+                "task_category": meta.task_category,
+                "prompt": _build_prompt(question_str),
+                "env_kwargs": {
+                    "ground_truth": answers,
+                    "question": question_str,
+                    "data_source": meta.data_source,
+                    "task_category": meta.task_category,
+                },
+                "reward_model": {"ground_truth": {"target": answers}},
+                "extra_info": {"index": i, "split": split},
+            })
+        if rows:
+            return rows
+
+    # Fallback to jsonl (line-delimited records).
+    for pat in jsonl_candidates:
+        matches = glob.glob(os.path.join(root, pat))
+        if not matches:
+            continue
+        path = matches[0]
+        rows: List[dict] = []
+        i = 0
+        try:
+            for ex in _jsonl_iter(path):
+                # split filtering if exists
+                ex_split = ex.get("split", ex.get("set", None))
+                if ex_split is not None and str(ex_split) not in keep_splits:
+                    continue
+                question = ex.get("question") or ex.get("question_text") or ""
+                context = ex.get("context") or ex.get("context_text") or ""
+                answers = _extract_answers(ex.get("answers") or ex.get("answer"))
+                if question == "" or context == "" or not answers:
+                    continue
+                question_str = f"Context: {context}\n\nQuestion: {question}"
+                rows.append({
+                    "data_source": meta.data_source,
+                    "task_category": meta.task_category,
+                    "prompt": _build_prompt(question_str),
+                    "env_kwargs": {
+                        "ground_truth": answers,
+                        "question": question_str,
+                        "data_source": meta.data_source,
+                        "task_category": meta.task_category,
+                    },
+                    "reward_model": {"ground_truth": {"target": answers}},
+                    "extra_info": {"index": i, "split": split},
+                })
+                i += 1
+        except Exception:
+            continue
+        if rows:
+            return rows
+
+    return []
+
+
 def process_squad(meta: DatasetMeta, split: str) -> List[dict]:
+    # Prefer local SQuAD artifacts if provided.
+    if LOCAL_DATA_DIR:
+        rows_local = _process_squad_local(meta=meta, split=split)
+        if rows_local:
+            return rows_local
+
     from datasets import load_dataset
-    ds = load_dataset(meta.hf_repo_id, split=meta.split_map[split])
+    try:
+        ds = load_dataset(meta.hf_repo_id, split=meta.split_map[split])
+    except Exception as e:
+        logger.warning("Could not load %s from HF: %s. Returning empty.", meta.data_source, e)
+        return []
+
     rows = []
     for i, ex in enumerate(ds):
         answers = list(set(ex["answers"]["text"]))
