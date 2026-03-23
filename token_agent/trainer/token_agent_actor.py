@@ -154,8 +154,16 @@ class TokenAgentActor(DataParallelPPOActor):
         batch = data.select(batch_keys=select_keys).batch
         has_multi_modal = "multi_modal_inputs" in data.non_tensor_batch.keys()
 
-        # category_ids may be in non_tensor_batch
+        # Derive task_category from data_source (task_category itself is not
+        # carried through the rollout loop, but data_source is).
         category_ids_np = data.non_tensor_batch.get("task_category", None)
+        if category_ids_np is None:
+            data_sources = data.non_tensor_batch.get("data_source", None)
+            if data_sources is not None:
+                from token_agent.data.dataset_registry import get_task_category
+                category_ids_np = np.array(
+                    [get_task_category(str(ds)) for ds in data_sources], dtype=np.int64
+                )
 
         if has_multi_modal:
             num_mini = data.batch.batch_size[0] // self.config.ppo_mini_batch_size

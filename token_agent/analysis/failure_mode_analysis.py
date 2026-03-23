@@ -495,13 +495,16 @@ def load_records_from_wandb_table(table_path: str) -> List[EvalRecord]:
     for row in table["data"]:
         def _get(key, default=None):
             return row[col_idx[key]] if key in col_idx else default
+        ds = _get("data_source", "unknown") or "unknown"
+        cat = _get("task_category", None)
+        cat = int(cat) if cat is not None else get_task_category(ds)
         records.append(EvalRecord(
-            data_source=_get("data_source", "unknown"),
-            task_category=int(_get("task_category", 0)),
-            question=_get("question", ""),
-            response=_get("response", ""),
+            data_source=ds,
+            task_category=cat,
+            question=_get("question", "") or "",
+            response=_get("response", "") or "",
             ground_truth=_get("ground_truth"),
-            reward=float(_get("reward", _get("score", 0.0))),
+            reward=float(_get("reward", _get("score", 0.0)) or 0.0),
         ))
     return records
 

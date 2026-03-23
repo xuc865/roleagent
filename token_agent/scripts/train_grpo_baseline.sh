@@ -9,6 +9,10 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+cd "${PROJECT_DIR}"
+
 MODEL_PATH="${1:-Qwen/Qwen3-30B-A3B}"
 N_GPUS="${2:-8}"
 

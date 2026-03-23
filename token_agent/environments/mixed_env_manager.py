@@ -15,8 +15,6 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 from omegaconf import OmegaConf
 
-from token_agent.data.dataset_registry import get_task_category
-
 
 class MixedEnvironmentManager:
     """

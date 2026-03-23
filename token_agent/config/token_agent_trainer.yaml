@@ -36,7 +36,7 @@ actor_rollout_ref:
     top_p: 0.95
     multi_turn:
       enable: True
-      tool_config_path: null
+      tool_config_path: token_agent/config/mixed_tool_config.yaml
     val_kwargs:
       do_sample: True
       temperature: 0.3
