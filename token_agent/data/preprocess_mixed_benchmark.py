@@ -660,7 +660,9 @@ def process_search_r1(meta: DatasetMeta, split: str) -> List[dict]:
     # mixed parquet files (train.parquet / test.parquet) that include
     # searchR1_* rows, we can directly filter them and skip HF download.
     if LOCAL_DATA_DIR:
-        candidate_roots = [_local_root_for_data_source(meta.data_source), LOCAL_DATA_DIR]
+        # Restrict local search loading to TOKEN_AGENT_DATA_DIR/search_qa/
+        # to avoid mixing raw datasets across directories.
+        candidate_roots = [os.path.join(LOCAL_DATA_DIR, "search_qa")]
         parquet_file = "train.parquet" if split == "train" else "test.parquet"
         for root in candidate_roots:
             mixed_path = os.path.join(root, parquet_file)
