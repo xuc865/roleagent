@@ -1,0 +1,100 @@
+hydra:
+  searchpath:
+    - file://verl/trainer/config
+
+defaults:
+  - ppo_trainer
+  - _self_
+
+data:
+  train_files: ~/data/token_agent_mixed/train.parquet
+  val_files: ~/data/token_agent_mixed/test.parquet
+  max_prompt_length: 2048
+  max_response_length: 2048
+  train_batch_size: 32
+  val_batch_size: 8
+  return_raw_chat: True
+  shuffle: True
+  filter_overlong_prompts: False
+  truncation: left
+
+actor_rollout_ref:
+  model:
+    path: Qwen/Qwen3-30B-A3B
+  actor:
+    loss_agg_mode: token-mean
+    clip_ratio: 0.2
+    entropy_coeff: 0.0
+    use_kl_loss: False
+    ppo_epochs: 1
+    ppo_mini_batch_size: ${data.train_batch_size}
+    ppo_micro_batch_size_per_gpu: 2
+  rollout:
+    name: vllm
+    n: 1
+    temperature: 0.7
+    top_p: 0.95
+    multi_turn:
+      enable: True
+      tool_config_path: null
+    val_kwargs:
+      do_sample: True
+      temperature: 0.3
+      top_p: 0.9
+
+algorithm:
+  adv_estimator: grpo
+  gamma: 1.0
+  norm_adv_by_std_in_grpo: True
+  use_kl_in_reward: False
+  filter_groups:
+    enable: False
+  token_agent:
+    enable: False
+    wrong_tool_penalty: 0.2
+    overthinking_penalty: 1.0
+
+reward_model:
+  reward_manager: episode
+  enable: False
+
+trainer:
+  project_name: token-agent
+  experiment_name: grpo_baseline_mixed
+  total_epochs: 10
+  total_training_steps: null
+  balance_batch: True
+  nnodes: 1
+  n_gpus_per_node: 8
+  save_freq: 100
+  test_freq: 50
+  val_before_train: True
+  logger: ['console', 'wandb']
+
+env:
+  env_name: mixed
+  seed: 42
+  max_steps: 10
+  history_length: 2
+  resources_per_worker:
+    num_cpus: 0.1
+    num_gpus: 0
+  rollout:
+    n: 4
+  mixed:
+    active_categories: [0, 1, 2, 3, 4]
+  search:
+    log_requests: false
+    search_url: "http://127.0.0.1:8000/retrieve"
+    topk: 3
+    timeout: 60
+  alfworld:
+    eval_dataset: eval_in_distribution
+  webshop:
+    use_small: True
+    human_goals: False
+  sokoban:
+    dim_room: [6, 6]
+    num_boxes: 1
+    search_depth: 30
+    mode: tiny_rgb_array

@@ -694,6 +694,9 @@ def make_envs(config):
         envs = AppWorldEnvironmentManager(_envs, projection_f, config)
         val_envs = AppWorldEnvironmentManager(_val_envs, projection_f, config)
         return envs, val_envs
+    elif "mixed" in config.env.env_name.lower():
+        from token_agent.environments.mixed_env_manager import make_mixed_envs
+        return make_mixed_envs(config)
     else:
         print("Environment not supported")
         exit(1)
