@@ -16,9 +16,11 @@ Output columns per row:
 """
 
 import argparse
+import json
 import logging
 import os
-from typing import Callable, Dict, List
+import glob
+from typing import Callable, Dict, List, Optional
 
 import pandas as pd
 
@@ -30,6 +32,8 @@ from token_agent.data.dataset_registry import (
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
+
+LOCAL_DATA_DIR: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -45,8 +49,19 @@ def _build_prompt(question: str, system: str = "") -> List[dict]:
 
 
 def process_gsm8k(meta: DatasetMeta, split: str) -> List[dict]:
+    # Prefer local files if provided (HF may be unavailable in some environments).
+    if LOCAL_DATA_DIR:
+        rows_local = _process_gsm8k_local(meta=meta, split=split)
+        if rows_local:
+            return rows_local
+
     from datasets import load_dataset
-    ds = load_dataset(meta.hf_repo_id, "main", split=meta.split_map[split])
+    try:
+        ds = load_dataset(meta.hf_repo_id, "main", split=meta.split_map[split])
+    except Exception as e:
+        logger.warning("Could not load %s from HF: %s. Skipping.", meta.data_source, e)
+        return []
+
     rows = []
     for i, ex in enumerate(ds):
         answer = ex["answer"].split("####")[-1].strip()
@@ -63,6 +78,12 @@ def process_gsm8k(meta: DatasetMeta, split: str) -> List[dict]:
 
 
 def process_math(meta: DatasetMeta, split: str) -> List[dict]:
+    # Prefer local math files if provided.
+    if LOCAL_DATA_DIR:
+        rows_local = _process_math_local(meta=meta, split=split)
+        if rows_local:
+            return rows_local
+
     from datasets import load_dataset
     try:
         ds = load_dataset(meta.hf_repo_id, split=meta.split_map[split])
@@ -87,6 +108,205 @@ def process_math(meta: DatasetMeta, split: str) -> List[dict]:
             "extra_info": {"index": i, "split": split},
         })
     return rows
+
+
+def _find_first_existing_file(root: str, candidates: List[str]) -> Optional[str]:
+    for name in candidates:
+        p = os.path.join(root, name)
+        if os.path.exists(p):
+            return p
+    return None
+
+
+def _jsonl_iter(path: str):
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith("{"):
+                yield json.loads(line)
+
+
+def _process_gsm8k_local(meta: DatasetMeta, split: str) -> List[dict]:
+    assert LOCAL_DATA_DIR is not None
+    root = LOCAL_DATA_DIR
+    path = _find_first_existing_file(root, ["gsm8k.json", "gsm8k.jsonl"])
+    if not path:
+        return []
+
+    # gsm8k.json is a JSON array of {"text": ..., "label": ...}
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, list):
+        return []
+
+    n = len(data)
+    if n == 0:
+        return []
+    cut = int(0.9 * n)
+
+    rows = []
+    for i, ex in enumerate(data):
+        is_train = i < cut
+        if split == "train" and not is_train:
+            continue
+        if split == "test" and is_train:
+            continue
+
+        text = ex.get("text") or ex.get("question") or ex.get("problem") or ""
+        label = ex.get("label") if "label" in ex else ex.get("answer")
+        if text == "" or label is None:
+            continue
+        answer = str(label).strip()
+        rows.append({
+            "data_source": meta.data_source,
+            "task_category": meta.task_category,
+            "prompt": _build_prompt(text),
+            "env_kwargs": {
+                "ground_truth": answer,
+                "question": text,
+                "data_source": meta.data_source,
+                "task_category": meta.task_category,
+            },
+            "reward_model": {"ground_truth": answer},
+            "extra_info": {"index": i, "split": split},
+        })
+    return rows
+
+
+def _process_math_local(meta: DatasetMeta, split: str) -> List[dict]:
+    assert LOCAL_DATA_DIR is not None
+    root = LOCAL_DATA_DIR
+
+    # Your local directory contains:
+    # - math500.jsonl
+    # - minerva_math.jsonl
+    #
+    # We map:
+    # - lighteval/MATH -> math500.jsonl
+    # - math_dapo     -> minerva_math.jsonl
+    if meta.data_source in ("lighteval/MATH",):
+        path = _find_first_existing_file(root, ["math500.jsonl", "math.jsonl", "math.json"])
+    elif meta.data_source in ("math_dapo",):
+        path = _find_first_existing_file(root, ["minerva_math.jsonl", "math_dapo.jsonl", "math_dapo.json"])
+    else:
+        # default to math500
+        path = _find_first_existing_file(root, ["math500.jsonl", "minerva_math.jsonl"])
+
+    if not path:
+        return []
+
+    # jsonl lines contain: problem/solution/answer/(unique_id)
+    # We'll split by index (deterministic) using a 90/10 split by default.
+    try:
+        n = sum(1 for _ in _jsonl_iter(path))
+    except Exception as e:
+        logger.warning("Failed counting local math file %s: %s", path, e)
+        return []
+
+    if n == 0:
+        return []
+    cut = int(0.9 * n)
+
+    rows: List[dict] = []
+    for i, ex in enumerate(_jsonl_iter(path)):
+        is_train = i < cut
+        if split == "train" and not is_train:
+            continue
+        if split == "test" and is_train:
+            continue
+
+        question = ex.get("problem") or ex.get("question") or ""
+        answer = ex.get("answer") or ex.get("solution") or ""
+        if question == "" or answer == "":
+            continue
+
+        rows.append({
+            "data_source": meta.data_source,
+            "task_category": meta.task_category,
+            "prompt": _build_prompt(question),
+            "env_kwargs": {
+                "ground_truth": answer,
+                "question": question,
+                "data_source": meta.data_source,
+                "task_category": meta.task_category,
+            },
+            "reward_model": {"ground_truth": answer},
+            "extra_info": {"index": i, "split": split},
+        })
+    return rows
+
+
+def _process_aime_local(meta: DatasetMeta, split: str) -> List[dict]:
+    \"\"\"Load AIME-like problems from local files if present.\"\"\"
+    assert LOCAL_DATA_DIR is not None
+    root = LOCAL_DATA_DIR
+
+    # Try common filename patterns.
+    data_source = meta.data_source  # e.g. aime_2024
+    patterns: List[str] = []
+    if "2024" in data_source:
+        patterns = ["*aime*2024*.jsonl", "*aime*24*.jsonl", "*aime2024*"]
+    elif "2025" in data_source:
+        patterns = ["*aime*2025*.jsonl", "*aime*25*.jsonl", "*aime2025*"]
+    else:
+        patterns = [f"*{data_source}*"]
+
+    path = None
+    for pat in patterns:
+        matches = glob.glob(os.path.join(root, pat))
+        if matches:
+            path = matches[0]
+            break
+    if not path:
+        return []
+
+    # Expect jsonl lines with problem/answer (or question/answer).
+    try:
+        n = sum(1 for _ in _jsonl_iter(path))
+    except Exception as e:
+        logger.warning("Failed counting local aime file %s: %s", path, e)
+        return []
+
+    if n == 0:
+        return []
+
+    cut = int(0.9 * n)
+    rows: List[dict] = []
+    for i, ex in enumerate(_jsonl_iter(path)):
+        is_train = i < cut
+        if split == "train" and not is_train:
+            continue
+        if split == "test" and is_train:
+            continue
+
+        question = ex.get("problem") or ex.get("question") or ""
+        answer = ex.get("answer") or ex.get("solution") or ""
+        if question == "" or answer == "":
+            continue
+
+        rows.append({
+            "data_source": meta.data_source,
+            "task_category": meta.task_category,
+            "prompt": _build_prompt(question),
+            "env_kwargs": {
+                "ground_truth": answer,
+                "question": question,
+                "data_source": meta.data_source,
+                "task_category": meta.task_category,
+            },
+            "reward_model": {"ground_truth": answer},
+            "extra_info": {"index": i, "split": split},
+        })
+    return rows
+
+
+def process_aime(meta: DatasetMeta, split: str) -> List[dict]:
+    # AIME is expected to be local-only in your setup.
+    if LOCAL_DATA_DIR:
+        return _process_aime_local(meta=meta, split=split)
+    return []
 
 
 def process_squad(meta: DatasetMeta, split: str) -> List[dict]:
@@ -221,6 +441,9 @@ def process_env_placeholder(meta: DatasetMeta, split: str) -> List[dict]:
 _PROCESSORS: Dict[str, Callable] = {
     "openai/gsm8k": process_gsm8k,
     "lighteval/MATH": process_math,
+    "math_dapo": process_math,
+    "aime_2024": process_aime,
+    "aime_2025": process_aime,
     "squad": process_squad,
     "simpleqa": process_simpleqa,
     "aa_omniscience": process_aa_omniscience,
@@ -244,7 +467,13 @@ def process_dataset(meta: DatasetMeta, split: str) -> List[dict]:
     if processor is None:
         logger.warning("No processor for %s – skipping", meta.data_source)
         return []
-    return processor(meta, split)
+    try:
+        return processor(meta, split)
+    except Exception as e:
+        # Make preprocessing resilient: one missing/unreachable dataset
+        # should not crash the whole mixed-benchmark build.
+        logger.warning("Processor failed for %s (%s): %s. Skipping.", meta.data_source, split, e)
+        return []
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +484,12 @@ def main():
     parser = argparse.ArgumentParser(description="Build Token-Agent mixed benchmark parquets.")
     parser.add_argument("--local_dir", default="~/data/token_agent_mixed",
                         help="Directory to save parquet files")
+    parser.add_argument(
+        "--local_dataset_dir",
+        default=os.environ.get("TOKEN_AGENT_DATA_DIR", None),
+        help="Local dataset directory (for gsm8k/math/aime when HF is unavailable). "
+             "You can also set env TOKEN_AGENT_DATA_DIR.",
+    )
     parser.add_argument("--active_categories", default="0,1,2,3",
                         help="Comma-separated category IDs to include (0-4)")
     parser.add_argument("--max_per_dataset", type=int, default=None,
@@ -262,6 +497,8 @@ def main():
     args = parser.parse_args()
 
     local_dir = os.path.expanduser(args.local_dir)
+    global LOCAL_DATA_DIR
+    LOCAL_DATA_DIR = args.local_dataset_dir
     os.makedirs(local_dir, exist_ok=True)
     active_cats = set(int(c) for c in args.active_categories.split(","))
 
