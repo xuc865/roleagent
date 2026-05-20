@@ -134,3 +134,4 @@ outputs
 .tmp
 *ports
 
+.nfs*

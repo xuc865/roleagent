@@ -450,6 +450,10 @@ bash examples/gigpo_dynamic_trainer/run_webshop.sh # WebShop
 
 ### 7. Role-Agent (WIA / AIW)
 
+<p align="center">
+    <img src="./docs/roleagent.png" alt="Role-Agent" width="80%">
+</p>
+
 This fork adds **Role-Agent–style** training options from *Role-Agent: Bootstrapping LLM Agents via Dual-Role Evolution*: **World-In-Agent (WIA)** and **Agent-In-World (AIW)**. Enable them with Hydra, e.g. `algorithm.role_agent.enable_wia=true algorithm.role_agent.enable_aiw=true`. Full behavior, GiGPO string-match parity, and caveats are documented in [`docs/role_agent_alignment.md`](./docs/role_agent_alignment.md).
 
 Launch scripts default data roots to **`/mnt`** (override `VERL_DATA_ROOT` / `SEARCH_DATA_ROOT` on your cluster). See [`examples/role_agent_trainer/README.md`](./examples/role_agent_trainer/README.md).
