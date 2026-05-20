@@ -15,6 +15,7 @@
 
 import torch
 import numpy as np
+from omegaconf import OmegaConf
 from verl import DataProto
 from verl.utils.dataset.rl_dataset import collate_fn
 from verl.utils.model import compute_position_id_with_mask
@@ -39,6 +40,7 @@ class TrajectoryCollector:
         self.config = config
         self.tokenizer = tokenizer
         self.processor = processor
+        self.aiw_curriculum = None  # set by RayPPOTrainer when algorithm.role_agent.enable_aiw
 
     def preprocess_single_sample(
         self,
@@ -172,13 +174,26 @@ class TrajectoryCollector:
                 raise RuntimeError(f"Prompt length {len(raw_prompt_ids)} is longer than {self.config.data.max_prompt_length}.")
 
         # Build final output dict
+        if "index" in gen_batch.non_tensor_batch:
+            gidx = gen_batch.non_tensor_batch["index"][item]
+            try:
+                if isinstance(gidx, (int, np.integer)):
+                    dataset_index = int(gidx)
+                else:
+                    arr = np.asarray(gidx).reshape(-1)
+                    dataset_index = int(arr[0]) if arr.size else int(item)
+            except (TypeError, ValueError):
+                dataset_index = int(item)
+        else:
+            dataset_index = int(item)
+
         row_dict.update({
             'input_ids': input_ids[0],
             'attention_mask': attention_mask[0],
             'position_ids': position_ids[0],
             'raw_prompt_ids': raw_prompt_ids,
             'anchor_obs': _obs_anchor,
-            'index': item,
+            'index': dataset_index,
             'data_source': data_source
         })
 
@@ -361,15 +376,32 @@ class TrajectoryCollector:
             batch = batch.union(batch_output)
             
             text_actions = self.tokenizer.batch_decode(batch.batch['responses'], skip_special_tokens=True)
-            
+
             next_obs, rewards, dones, infos = envs.step(text_actions)
 
-            
             if len(rewards.shape) == 2:
                 rewards = rewards.squeeze(1)
             if len(dones.shape) == 2:
                 # dones is numpy, delete a dimension
                 dones = dones.squeeze(1)
+
+            if OmegaConf.select(self.config, "algorithm.role_agent.enable_wia", default=False):
+                from role_agent.wia_utils import next_obs_text_for_wia, parse_predict_next, predicate_multiplier, string_similarity
+
+                max_c = int(OmegaConf.select(self.config, "algorithm.role_agent.text_match_max_chars", default=0) or 0)
+                rewards = np.asarray(rewards, dtype=np.float32).copy()
+                for i in range(batch_size):
+                    pred = parse_predict_next(text_actions[i])
+                    actual = next_obs_text_for_wia(next_obs, i)
+                    # Skip when there is no comparable text (e.g. raw image anchor); avoid bogus sim=0 halving reward.
+                    if not actual:
+                        continue
+                    # Without explicit truncation, skip pathological lengths (O(n^2) difflib).
+                    if max_c <= 0 and len(actual) > 8192:
+                        continue
+                    sim = string_similarity(pred, actual, max_chars=max_c if max_c > 0 else None)
+                    mult = predicate_multiplier(sim)
+                    rewards[i] = float(rewards[i]) * mult
 
             if 'is_action_valid' in infos[0]:
                 batch.non_tensor_batch['is_action_valid'] = np.array([info['is_action_valid'] for info in infos], dtype=bool)
@@ -535,5 +567,12 @@ class TrajectoryCollector:
             traj_uid=total_traj_uid,
             tool_callings=totoal_tool_callings,
         )
-        
+
+        if self.aiw_curriculum is not None:
+            self.aiw_curriculum.record_rollout_end(
+                total_batch_list=total_batch_list,
+                success=total_success,
+                tokenizer=self.tokenizer,
+            )
+
         return gen_batch_output

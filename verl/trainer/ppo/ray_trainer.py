@@ -586,7 +586,29 @@ class RayPPOTrainer:
             val_dataset = create_rl_dataset(self.config.data.val_files, self.config.data, self.tokenizer, self.processor)
         self.train_dataset, self.val_dataset = train_dataset, val_dataset
 
-        if train_sampler is None:
+        self.aiw_curriculum = None
+        if self.traj_collector is not None:
+            self.traj_collector.aiw_curriculum = None
+
+        if OmegaConf.select(self.config, "algorithm.role_agent.enable_aiw", default=False):
+            from role_agent.aiw_curriculum import AIWCurriculum, MutableWeightedSampler
+
+            ra = OmegaConf.select(self.config, "algorithm.role_agent", default=None)
+            ra = OmegaConf.to_container(ra, resolve=True) if ra is not None else {}
+            self.aiw_curriculum = AIWCurriculum(
+                len(self.train_dataset),
+                top_k=int(ra.get("aiw_top_k", 3)),
+                boost=float(ra.get("aiw_boost", 0.35)),
+                self_boost=float(ra.get("aiw_self_boost", 0.15)),
+                max_history=int(ra.get("aiw_max_history", 512)),
+                similarity_thresh=float(ra.get("aiw_similarity_thresh", 0.0)),
+                text_match_max_chars=int(ra.get("text_match_max_chars", 0)),
+            )
+            gen = torch.Generator().manual_seed(int(self.config.data.get("seed", 1)))
+            train_sampler = MutableWeightedSampler(len(self.train_dataset), self.aiw_curriculum.weights, gen)
+            if self.traj_collector is not None:
+                self.traj_collector.aiw_curriculum = self.aiw_curriculum
+        elif train_sampler is None:
             train_sampler = create_rl_sampler(self.config.data, self.train_dataset)
         if collate_fn is None:
             from verl.utils.dataset.rl_dataset import collate_fn as default_collate_fn

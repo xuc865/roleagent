@@ -24,6 +24,18 @@ from agent_system.environments.base import EnvironmentManagerBase, to_numpy
 from agent_system.memory import SimpleMemory, SearchMemory
 from omegaconf import OmegaConf
 
+
+def _append_role_agent_wia_suffix(config, text: str) -> str:
+    try:
+        from role_agent.wia_utils import WIA_PROMPT_SUFFIX, role_agent_flag
+
+        if role_agent_flag(config, "enable_wia"):
+            return text + WIA_PROMPT_SUFFIX
+    except Exception:
+        pass
+    return text
+
+
 def parse_gamefile(infos):
     gamefile = []
     for info in infos:
@@ -111,6 +123,7 @@ class SearchEnvironmentManager(EnvironmentManagerBase):
                     memory_context=memory_ctx[i],
                     step_count=len(self.memory[i]),
                 )
+            obs_i = _append_role_agent_wia_suffix(self.config, obs_i)
             postprocess_text_obs.append(obs_i)
 
         return postprocess_text_obs
@@ -207,6 +220,7 @@ class AlfWorldEnvironmentManager(EnvironmentManagerBase):
                     current_observation=text_obs[i],
                     admissible_actions=reformatted_admissible_actions
                 )
+            obs = _append_role_agent_wia_suffix(self.config, obs)
 
             postprocess_text_obs.append(obs)
         return postprocess_text_obs
@@ -501,6 +515,7 @@ class WebshopEnvironmentManager(EnvironmentManagerBase):
                         available_actions=reformatted_available_actions
                     )
 
+            obs = _append_role_agent_wia_suffix(self.config, obs)
             postprocess_text_obs.append(obs)
 
         return postprocess_text_obs

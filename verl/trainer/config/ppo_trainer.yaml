@@ -252,6 +252,18 @@ algorithm:
     mode: "mean_norm" # "mean_norm" or "mean_std_norm"
     enable_similarity: False # whether to use similarity-based anchor state grouping in GiGPO (supported for text-only tasks)
     similarity_thresh: 0.95 # similarity threshold for GiGPO (0.0, 1.0)
+  # Role-Agent WIA / AIW (see docs/role_agent_alignment.md)
+  role_agent:
+    enable_wia: False # require <predict_next>..</predict_next>; scale step reward by sigmoid(string-sim to next anchor)
+    enable_aiw: False # reweight train sampler from failed-trajectory string-similarity "retrieval"
+    aiw_top_k: 3
+    aiw_boost: 0.35
+    aiw_self_boost: 0.15
+    aiw_max_history: 512
+    # GiGPO-like gate for AIW cross-task boosts only (0 = disabled). See algorithm.gigpo.similarity_thresh.
+    aiw_similarity_thresh: 0.0
+    # Truncate strings before SequenceMatcher for WIA + AIW (0 = full string, GiGPO parity; e.g. 4096 for speed).
+    text_match_max_chars: 0
   filter_groups: # DAPO from https://arxiv.org/abs/2503.14476
     enable: False
     max_num_gen_batches: 10

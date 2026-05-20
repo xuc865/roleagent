@@ -1,6 +1,10 @@
 """
 Failure mode analysis for baselines (e.g. GRPO) on the mixed benchmark.
 
+This is separate from **training-time** Role-Agent AIW (`algorithm.role_agent.enable_aiw`,
+``AIWCurriculum`` in ``role_agent/``). Here we analyze mixed-benchmark **evaluation** logs only.
+See ``docs/role_agent_alignment.md`` for the training stack.
+
 This module examines whether a baseline model collapses into a single
 reasoning mode when trained/evaluated on a heterogeneous mix of task types.
 

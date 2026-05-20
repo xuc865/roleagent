@@ -69,20 +69,30 @@ def summarize_group_size(group_size: list):
         if prop:
             print(f"{size:>4} | {cnt:>5} | {prop:>9.2%}")
             
-def are_similar(a: str, b: str, threshold: float = 0.95) -> bool:
+def text_similarity_ratio(a: str, b: str) -> float:
     """
-    Check whether two text observations are similar enough.
-    
-    Args:
-        a, b (str): Input strings to compare.
-        threshold (float): Minimum similarity ratio.
-    
-    Returns:
-        bool: True if similarity >= threshold.
+    Raw ``difflib.SequenceMatcher`` ratio in ``[0, 1]`` (same underlying score as ``are_similar``).
+
+    GiGPO uses this ratio against ``threshold`` for anchor-state grouping; Role-Agent WIA/AIW reuse
+    the same ratio for continuous scores.
     """
     if not isinstance(a, str) or not isinstance(b, str):
         raise ValueError("Only text-based observations are supported for similarity-based GiGPO in this version.")
-    return SequenceMatcher(None, a, b).ratio() >= threshold
+    return float(SequenceMatcher(None, a, b).ratio())
+
+
+def are_similar(a: str, b: str, threshold: float = 0.95) -> bool:
+    """
+    Check whether two text observations are similar enough.
+
+    Args:
+        a, b (str): Input strings to compare.
+        threshold (float): Minimum similarity ratio.
+
+    Returns:
+        bool: True if similarity >= threshold.
+    """
+    return text_similarity_ratio(a, b) >= threshold
 
 def compute_step_discounted_returns(batch: DataProto, gamma: float):
     """
