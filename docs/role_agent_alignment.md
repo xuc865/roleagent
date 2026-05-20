@@ -66,4 +66,4 @@ Scripts live in `examples/role_agent_trainer/`. They `cd` to the repo root from 
 - PPO / GiGPO training: `verl/trainer/ppo/ray_trainer.py`  
 - Multi-turn rewards: `agent_system/multi_turn_rollout/rollout_loop.py`  
 - Prompts for optional LLM workflows: `role_agent/paper_prompts.py`  
-- Example jobs: `examples/role_agent_trainer/run_alfworld.sh`, `run_webshop.sh`, `run_search.sh`
+- Example jobs: `examples/role_agent_trainer/run_alfworld.sh`, `run_webshop.sh` (PPO), `run_webshop_gigpo.sh` (GiGPO), `run_search.sh` — see `examples/role_agent_trainer/README.md`
