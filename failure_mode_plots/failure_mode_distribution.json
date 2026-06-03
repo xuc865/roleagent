@@ -1,0 +1,38 @@
+{
+  "Phase 1 (step 0-30)": {
+    "wrong_receptacle": 5,
+    "entity_confusion": 1,
+    "object_not_found": 14,
+    "navigation_loop": 2,
+    "missing_precondition": 2,
+    "repeated_failed_action": 1
+  },
+  "Phase 2 (step 31-60)": {
+    "object_not_found": 20,
+    "wrong_receptacle": 3,
+    "navigation_loop": 1,
+    "entity_confusion": 1
+  },
+  "Phase 3 (step 61-90)": {
+    "object_not_found": 15,
+    "wrong_object_interaction": 2,
+    "wrong_receptacle": 3,
+    "missing_precondition": 2,
+    "entity_confusion": 2,
+    "navigation_loop": 1
+  },
+  "Phase 4 (step 91-120)": {
+    "missing_precondition": 2,
+    "object_not_found": 20,
+    "wrong_receptacle": 2,
+    "entity_confusion": 1
+  },
+  "Phase 5 (step 121-150)": {
+    "entity_confusion": 2,
+    "object_not_found": 18,
+    "wrong_receptacle": 1,
+    "wrong_object_interaction": 2,
+    "navigation_loop": 1,
+    "repeated_failed_action": 1
+  }
+}

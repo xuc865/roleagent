@@ -1,0 +1,5 @@
+# Minimal tool config for the mixed benchmark.
+# Tools are defined in the unified system prompt and handled by environment
+# managers, not by the sglang tool-call parser. This file satisfies the
+# validate_config assertion in RayPPOTrainer.
+tools: []

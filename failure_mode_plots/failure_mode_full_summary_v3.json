@@ -1,0 +1,13 @@
+{
+  "repetitive_search": 1292,
+  "repeated_failed_action": 236,
+  "premature_give_up": 395,
+  "missing_precondition": 361,
+  "wrong_receptacle": 587,
+  "wrong_search_location": 611,
+  "navigation_loop": 152,
+  "exhaustive_search_failure": 44,
+  "entity_confusion": 144,
+  "wrong_object_interaction": 110,
+  "action_format_error": 7
+}

@@ -1,0 +1,12 @@
+{
+  "insufficient_exploration": 1687,
+  "repeated_failed_action": 236,
+  "missing_precondition": 361,
+  "wrong_receptacle": 587,
+  "wrong_search_location": 611,
+  "navigation_loop": 152,
+  "exhaustive_search_failure": 44,
+  "entity_confusion": 144,
+  "wrong_object_interaction": 110,
+  "action_format_error": 7
+}

@@ -1,0 +1,94 @@
+{
+  "Step 0-9": {
+    "object_not_found": 6,
+    "missing_precondition": 4,
+    "wrong_receptacle": 3,
+    "repeated_failed_action": 1,
+    "navigation_loop": 1
+  },
+  "Step 10-19": {
+    "object_not_found": 8,
+    "wrong_receptacle": 2,
+    "repeated_failed_action": 1,
+    "navigation_loop": 1,
+    "missing_precondition": 2,
+    "wrong_object_interaction": 1
+  },
+  "Step 20-29": {
+    "object_not_found": 9,
+    "missing_precondition": 1,
+    "repeated_failed_action": 3,
+    "navigation_loop": 1,
+    "entity_confusion": 1
+  },
+  "Step 30-39": {
+    "object_not_found": 10,
+    "missing_precondition": 2,
+    "wrong_receptacle": 2,
+    "repeated_failed_action": 1
+  },
+  "Step 40-49": {
+    "entity_confusion": 2,
+    "object_not_found": 10,
+    "wrong_receptacle": 2,
+    "wrong_object_interaction": 1
+  },
+  "Step 50-59": {
+    "object_not_found": 10,
+    "wrong_receptacle": 5
+  },
+  "Step 60-69": {
+    "wrong_receptacle": 3,
+    "missing_precondition": 4,
+    "object_not_found": 6,
+    "repeated_failed_action": 1,
+    "entity_confusion": 1
+  },
+  "Step 70-79": {
+    "missing_precondition": 3,
+    "wrong_receptacle": 1,
+    "object_not_found": 10,
+    "repeated_failed_action": 1
+  },
+  "Step 80-89": {
+    "object_not_found": 10,
+    "wrong_receptacle": 3,
+    "missing_precondition": 1,
+    "repeated_failed_action": 1
+  },
+  "Step 90-99": {
+    "object_not_found": 14,
+    "missing_precondition": 1
+  },
+  "Step 100-109": {
+    "wrong_object_interaction": 1,
+    "object_not_found": 11,
+    "wrong_receptacle": 1,
+    "repeated_failed_action": 2
+  },
+  "Step 110-119": {
+    "wrong_receptacle": 3,
+    "object_not_found": 12
+  },
+  "Step 120-129": {
+    "object_not_found": 12,
+    "wrong_receptacle": 2,
+    "missing_precondition": 1
+  },
+  "Step 130-139": {
+    "object_not_found": 13,
+    "wrong_receptacle": 2
+  },
+  "Step 140-149": {
+    "object_not_found": 12,
+    "missing_precondition": 1,
+    "wrong_receptacle": 1,
+    "wrong_object_interaction": 1
+  },
+  "Step 150-150": {
+    "object_not_found": 4,
+    "repeated_failed_action": 1,
+    "entity_confusion": 1,
+    "wrong_receptacle": 2
+  }
+}

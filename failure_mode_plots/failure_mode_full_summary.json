@@ -1,0 +1,10 @@
+{
+  "object_not_found": 2342,
+  "repeated_failed_action": 236,
+  "missing_precondition": 361,
+  "wrong_receptacle": 587,
+  "navigation_loop": 152,
+  "entity_confusion": 144,
+  "wrong_object_interaction": 110,
+  "action_format_error": 7
+}
