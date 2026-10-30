@@ -1,20 +1,21 @@
 #!/bin/bash
 
-USER_ID="${USER_ID:-528316}"
-USER_NAME="${USER_NAME:-wangxucong.wxc}"
+USER_ID="${USER_ID:?Set USER_ID before submitting a job}"
+USER_NAME="${USER_NAME:?Set USER_NAME before submitting a job}"
 ACCESS_ID="${ACCESS_ID:-}"
 ACCESS_KEY="${ACCESS_KEY:-}"
 
-export PYTHONPATH=/mnt/workspace/wxc/roleagent:$PYTHONPATH
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PYTHONPATH="${ROLEAGENT_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}:${PYTHONPATH:-}"
 
 # OSS 与 NAS 配置
-ENDPOINT=cn-shanghai.oss.aliyuncs.com
+ENDPOINT="${OSS_ENDPOINT:?Set OSS_ENDPOINT before submitting a job}"
 OSS_ACCESS_ID="${OSS_ACCESS_ID:-}"
 OSS_ACCESS_KEY="${OSS_ACCESS_KEY:-}"
-OSS_BUCKET=ml-aigc-multimodal
-NAS_ENDPOINT=9b4854ab18-jyj17.cn-zhangjiakou.nas.aliyuncs.com
+OSS_BUCKET="${OSS_BUCKET:?Set OSS_BUCKET before submitting a job}"
+NAS_ENDPOINT="${NAS_ENDPOINT:?Set NAS_ENDPOINT before submitting a job}"
 
-cd /mnt/workspace/wxc/roleagent/submit
+cd "${SCRIPT_DIR}"
 workerCount="1"
 gpu_per_worker="8"
 cluster_file="./cluster_${gpu_per_worker}.json"
@@ -53,16 +54,16 @@ echo "Entry script: $ENTRY_SCRIPT"
 ../ai-hub-cli train mdl \
   --name=ehg \
   --job_name="${JOB_NAME}" \
-  --entry="bash /mnt/workspace/wxc/roleagent/submit/sen.sh --env-path ${ENTRY_SCRIPT}" \
+  --entry="bash ${SCRIPT_DIR}/sen.sh --env-path ${ENTRY_SCRIPT}" \
   --file.cluster_file="${cluster_file}" \
   --worker_count="${workerCount}" \
-  --algo_name=pytorch260 \
-  --token=974cf14b557151a0d8f5ad72055dbb92 \
-  --namespace=aigc_mlvl \
+  --algo_name="${AI_HUB_ALGO:?Set AI_HUB_ALGO before submitting a job}" \
+  --token="${AI_HUB_TOKEN:?Set AI_HUB_TOKEN before submitting a job}" \
+  --namespace="${AI_HUB_NAMESPACE:?Set AI_HUB_NAMESPACE before submitting a job}" \
   --user_params="" \
   --script="" \
-  --custom_docker_image=reg.docker.alibaba-inc.com/mdl/pytorch220-cu121-jupyterlab-ide:20241107153334 \
+  --custom_docker_image="${CUSTOM_DOCKER_IMAGE:?Set CUSTOM_DOCKER_IMAGE before submitting a job}" \
   --env="OMP_NUM_THREADS=${gpu_per_worker},GPUS=${gpu_per_worker},timestamp=${timestamp}" \
   --ignore "outputs/*,storage/*" \
   --nas_file_system_id=9b4854ab18-jyj17.cn-zhangjiakou.nas.aliyuncs.com \
-  --queue=demand_specific_na175_h20
+  --queue="${AI_HUB_QUEUE:?Set AI_HUB_QUEUE before submitting a job}"
