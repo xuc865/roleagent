@@ -65,5 +65,5 @@ echo "Entry script: $ENTRY_SCRIPT"
   --custom_docker_image="${CUSTOM_DOCKER_IMAGE:?Set CUSTOM_DOCKER_IMAGE before submitting a job}" \
   --env="OMP_NUM_THREADS=${gpu_per_worker},GPUS=${gpu_per_worker},timestamp=${timestamp}" \
   --ignore "outputs/*,storage/*" \
-  --nas_file_system_id=9b4854ab18-jyj17.cn-zhangjiakou.nas.aliyuncs.com \
+  --nas_file_system_id="${NAS_ENDPOINT:?Set NAS_ENDPOINT before submitting a job}" \
   --queue="${AI_HUB_QUEUE:?Set AI_HUB_QUEUE before submitting a job}"
